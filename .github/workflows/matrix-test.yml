@@ -6,7 +6,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     container:
       image: almalinux:8
     steps:
@@ -14,16 +14,16 @@ jobs:
 
       - name: Install build + test deps
         run: |
-          dnf -y install gcc make perl perl-core git openssl-devel pcre2-devel tar gzip findutils diffutils
+          dnf -y install gcc make perl perl-core perl-devel git openssl-devel pcre2-devel tar gzip findutils diffutils
           dnf -y install epel-release || true
           dnf -y install perl-Net-IP perl-App-cpanminus || true
           cpanm --notest Net::TacacsPlus || cpan -fT Net::TacacsPlus || true
 
-      - name: Build tac_plus-ng
+      - name: Build full suite (for Scm perl module)
         run: |
           git clone https://github.com/MarcJHuber/event-driven-servers.git
           cd event-driven-servers
-          ./configure tac_plus-ng </dev/null
+          ./configure </dev/null
           make
           make install
           ldconfig || true
@@ -33,10 +33,13 @@ jobs:
           set -x
           export LD_LIBRARY_PATH=/usr/local/lib
           /usr/local/sbin/tac_plus-ng -P poc.cfg && echo PARSE_OK || echo PARSE_FAIL
-          SCM=$(find event-driven-servers -name Scm.pm | head -1); echo "SCM=$SCM"
-          export PERL5LIB=$(dirname "$SCM")
+          SCMPM=$(find "$PWD/event-driven-servers" /usr/local /usr/lib64 /usr/share -name Scm.pm 2>/dev/null | head -1)
+          SCMSO=$(find "$PWD/event-driven-servers" /usr/local /usr/lib64 -name Scm.so 2>/dev/null | head -1)
+          echo "SCMPM=$SCMPM"; echo "SCMSO=$SCMSO"
+          export PERL5LIB="$(dirname "$SCMPM"):$(dirname "$SCMSO")"
+          echo "PERL5LIB=$PERL5LIB"
           TT="perl event-driven-servers/tac_plus-ng/perl/tactrace.pl --conf=$PWD/poc.cfg --username=youngho --key=testkey --exec=/usr/local/sbin/tac_plus-ng"
-          echo "############ T1: cisco + 'show version'      => EXPECT PERMIT ############"
+          echo "############ T1: cisco + 'show version'       => EXPECT PERMIT ############"
           $TT --nad=10.1.0.1 service=shell cmd=show cmd-arg=version || true
           echo "############ T2: cisco + 'configure terminal' => EXPECT DENY  ############"
           $TT --nad=10.1.0.1 service=shell cmd=configure cmd-arg=terminal || true
