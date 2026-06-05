@@ -6,35 +6,38 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
-      image: rockylinux:8
+      image: almalinux:8
     steps:
       - name: Install build deps
         run: |
           dnf -y install gcc make perl perl-core git openssl-devel pcre2-devel tar gzip findutils
 
-      - name: Clone tac_plus-ng source
-        run: git clone —depth 1 https://github.com/MarcJHuber/event-driven-servers.git
+      - name: Clone source
+        run: |
+          git clone https://github.com/MarcJHuber/event-driven-servers.git
 
       - name: Build
         run: |
+          set -x
           cd event-driven-servers
-          ./configure tac_plus-ng
+          ./configure tac_plus-ng </dev/null
           make
           make install DESTDIR=/tmp/stage
 
-      - name: Collect binary + runtime libs
+      - name: Collect
         run: |
           set -x
           BIN=$(find /tmp/stage /usr/local -name 'tac_plus-ng' -type f 2>/dev/null | head -1)
           echo "BIN=$BIN"; "$BIN" -v || true
           mkdir -p out/bin out/lib out/sample
           cp "$BIN" out/bin/
-          ldd "$BIN" | awk '{print $3}' | grep -E '^/' | while read l; do cp -L "$l" out/lib/ 2>/dev/null||true; done
+          ldd "$BIN" | awk '{print $3}' | grep -E '^/' | while read l; do cp -L "$l" out/lib/ 2>/dev/null || true; done
           cp -r event-driven-servers/tac_plus-ng/sample/* out/sample/ 2>/dev/null || true
           tar czf tacplus-ng-el8.tar.gz -C out .
 
-      - name: Upload artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: tacplus-ng-el8
