@@ -6,23 +6,23 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     container:
       image: almalinux:8
     steps:
       - name: Install build deps
         run: |
-          dnf -y install gcc make perl perl-core git openssl-devel pcre2-devel tar gzip findutils
+          dnf -y install gcc make perl perl-core perl-devel git openssl-devel pcre2-devel pam-devel tar gzip findutils
 
       - name: Clone source
         run: |
           git clone https://github.com/MarcJHuber/event-driven-servers.git
 
-      - name: Build
+      - name: Build full suite
         run: |
           set -x
           cd event-driven-servers
-          ./configure tac_plus-ng </dev/null
+          ./configure </dev/null
           make
           make install
 
@@ -31,6 +31,7 @@ jobs:
           set -x
           BIN=$(find /usr/local -name 'tac_plus-ng' -type f | head -1)
           echo "BIN=$BIN"; "$BIN" -v || true
+          echo "=== pammavis 포함 확인 ==="; ls -la /usr/local/sbin/pammavis* || echo "NO pammavis"
           mkdir -p out/lib
           cp -a /usr/local out/usr_local
           ldd "$BIN" | awk '{print $3}' | grep -E '^/' | while read l; do cp -L "$l" out/lib/ 2>/dev/null || true; done
