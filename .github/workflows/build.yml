@@ -24,17 +24,17 @@ jobs:
           cd event-driven-servers
           ./configure tac_plus-ng </dev/null
           make
-          make install DESTDIR=/tmp/stage
-          
+          make install
+
       - name: Collect
         run: |
           set -x
-          BIN=$(find /tmp/stage -name 'tac_plus-ng' -type f | head -1)
+          BIN=$(find /usr/local -name 'tac_plus-ng' -type f | head -1)
           echo "BIN=$BIN"; "$BIN" -v || true
           mkdir -p out/lib
-          cp -a /tmp/stage out/stage
+          cp -a /usr/local out/usr_local
           ldd "$BIN" | awk '{print $3}' | grep -E '^/' | while read l; do cp -L "$l" out/lib/ 2>/dev/null || true; done
-          find /tmp/stage -name '*.so*' -exec cp -L {} out/lib/ \; 2>/dev/null || true
+          find /usr/local -name '*.so*' -exec cp -L {} out/lib/ \; 2>/dev/null || true
           tar czf tacplus-ng-el8.tar.gz -C out .
 
       - name: Upload
