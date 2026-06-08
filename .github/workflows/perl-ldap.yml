@@ -1,0 +1,22 @@
+name: fetch-perl-ldap
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    container:
+      image: almalinux:8
+    steps:
+      - name: download perl-LDAP + deps
+        run: |
+          set -x
+          dnf -y install epel-release dnf-plugins-core
+          mkdir -p out
+          dnf download --resolve --destdir=out perl-LDAP
+          echo "=== 받은 RPM ==="; ls -la out
+          tar czf perl-ldap-el8.tar.gz -C out .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perl-ldap-el8
+          path: perl-ldap-el8.tar.gz
