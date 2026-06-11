@@ -18,18 +18,20 @@ jobs:
             printf "[inkbridge]\nname=inkbridge\nbaseurl=https://packages.inkbridgenetworks.com/freeradius-3.2/rocky/8/\nenabled=1\ngpgcheck=0\nmodule_hotfixes=1\n" > /etc/yum.repos.d/inkbridge.repo
             printf "[inkbridge-extras]\nname=inkbridge-extras\nbaseurl=https://packages.inkbridgenetworks.com/extras/rocky/8/\nenabled=1\ngpgcheck=0\nmodule_hotfixes=1\n" > /etc/yum.repos.d/inkbridge-extras.repo
             printf "[ltb-project]\nname=ltb-project\nbaseurl=https://ltb-project.org/rpm/8/x86_64\nenabled=1\ngpgcheck=0\n" > /etc/yum.repos.d/ltb-project.repo
-            rm -rf /out/* || true
-            echo "===== 다운로드(설치 트랜잭션, deps 포함) ====="
-            dnf install -y --downloadonly --downloaddir=/out --setopt=install_weak_deps=False \
+            mkdir -p /dl
+            echo "===== 다운로드 ====="
+            dnf install -y --downloadonly --downloaddir=/dl --setopt=install_weak_deps=False \
               freeradius freeradius-ldap freeradius-utils freeradius-sqlite
             echo "===== freeradius 버전 ====="
-            rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /out/freeradius-*.rpm | sort
-            if ls /out | grep -q "3.0.20"; then echo "FAIL: 3.0.20 섞임"; exit 1; fi
-            if ! ls /out | grep -q "freeradius-3.2.10"; then echo "FAIL: 3.2.10 없음"; exit 1; fi
-            echo "===== 핵심 의존성(libkqueue/openldap) ====="
-            ls /out | grep -iE "kqueue|openldap" || echo "(별도 패키지 없음 - 설치검증으로 확인)"
-            echo "===== 오프라인 설치 검증 (/out 만으로) ====="
-            dnf install -y --disablerepo="*" --nogpgcheck --setopt=install_weak_deps=False /out/*.rpm
+            rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /dl/freeradius-*.rpm | sort
+            if ls /dl | grep -q "3.0.20"; then echo "FAIL: 3.0.20 섞임"; exit 1; fi
+            if ! ls /dl | grep -q "freeradius-3.2.10"; then echo "FAIL: 3.2.10 없음"; exit 1; fi
+            echo "===== 검증 전에 /out 으로 복사(보존) ====="
+            rm -rf /out/* || true
+            cp /dl/*.rpm /out/
+            echo "복사된 RPM: $(ls /out/*.rpm | wc -l)"
+            echo "===== 오프라인 설치 검증 (/dl) ====="
+            dnf install -y --disablerepo="*" --nogpgcheck --setopt=install_weak_deps=False /dl/*.rpm
             echo "===== 설치된 버전 (3.2.10 이어야 함) ====="
             radiusd -v | head -1
             echo "radsniff: $(command -v radsniff || echo 없음)"
