@@ -7,11 +7,11 @@ jobs:
   bundle:
     runs-on: ubuntu-latest
     steps:
-      - name: Download + 검증 (Rocky 8 컨테이너)
+      - name: Download + repodata + 검증 (Rocky 8 컨테이너)
         run: |
           mkdir -p out
           docker run --rm -v "$PWD/out:/out" rockylinux:8 bash -ceu '
-            dnf -y install dnf-plugins-core
+            dnf -y install dnf-plugins-core createrepo_c
             dnf -y module reset freeradius || true
             dnf -y module disable freeradius || true
             dnf config-manager --set-enabled powertools || true
@@ -22,27 +22,27 @@ jobs:
             echo "===== 다운로드 ====="
             dnf install -y --downloadonly --downloaddir=/dl --setopt=install_weak_deps=False \
               freeradius freeradius-ldap freeradius-utils freeradius-sqlite
-            echo "===== freeradius 버전 ====="
+            echo "===== 버전 ====="
             rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /dl/freeradius-*.rpm | sort
             if ls /dl | grep -q "3.0.20"; then echo "FAIL: 3.0.20 섞임"; exit 1; fi
             if ! ls /dl | grep -q "freeradius-3.2.10"; then echo "FAIL: 3.2.10 없음"; exit 1; fi
-            echo "===== 검증 전에 /out 으로 복사(보존) ====="
+            echo "===== /out 복사 + repodata 생성 ====="
             rm -rf /out/* || true
             cp /dl/*.rpm /out/
-            echo "복사된 RPM: $(ls /out/*.rpm | wc -l)"
-            echo "===== 오프라인 설치 검증 (/dl) ====="
+            createrepo_c /out
+            ls -la /out/repodata/repomd.xml && echo "repodata OK"
+            echo "===== 오프라인 설치 검증(완전성) ====="
             dnf install -y --disablerepo="*" --nogpgcheck --setopt=install_weak_deps=False /dl/*.rpm
-            echo "===== 설치된 버전 (3.2.10 이어야 함) ====="
             radiusd -v | head -1
             echo "radsniff: $(command -v radsniff || echo 없음)"
           '
-      - name: tar 묶음 + 체크섬
+      - name: tar (rpm + repodata) + 체크섬
         run: |
           cd out
-          tar czf ../freeradius-3.2.10-el8-bundle.tar.gz *.rpm
+          tar czf ../freeradius-3.2.10-el8-bundle.tar.gz .
           cd ..
           sha256sum freeradius-3.2.10-el8-bundle.tar.gz | tee bundle.sha256
-          echo "포함 RPM 개수: $(ls out/*.rpm | wc -l)"
+          echo "RPM: $(ls out/*.rpm | wc -l) / repodata 파일: $(ls out/repodata | wc -l)"
       - name: Artifact 업로드
         uses: actions/upload-artifact@v4
         with:
