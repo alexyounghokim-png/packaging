@@ -1,26 +1,42 @@
 name: freeradius-3.2.10-el8-bundle
+
 on:
   workflow_dispatch:
+
 jobs:
   bundle:
     runs-on: ubuntu-latest
     steps:
-      - name: Download FreeRADIUS 3.2.10 + 의존성 (Rocky 8 컨테이너)
+      - name: Download + 검증 (Rocky 8 컨테이너, 모듈 비활성)
         run: |
           mkdir -p out
           docker run --rm -v "$PWD/out:/out" rockylinux:8 bash -ceu '
-            printf "[inkbridge]\nname=inkbridge\nbaseurl=https://packages.inkbridgenetworks.com/freeradius-3.2/rocky/8/\nenabled=1\ngpgcheck=0\n" > /etc/yum.repos.d/inkbridge.repo
+            printf "[inkbridge]\nname=inkbridge\nbaseurl=https://packages.inkbridgenetworks.com/freeradius-3.2/rocky/8/\nenabled=1\ngpgcheck=0\nmodule_hotfixes=1\n" > /etc/yum.repos.d/inkbridge.repo
             dnf -y install dnf-plugins-core
-            mkdir -p /tmp/fr
-            dnf download --resolve --destdir /tmp/fr freeradius freeradius-config freeradius-ldap freeradius-utils freeradius-sqlite
-            echo "===== RPM 목록 ====="; ls -1 /tmp/fr
-            echo "===== 버전 ====="; rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /tmp/fr/freeradius-3.2*.rpm
-            echo "===== libkqueue 여부 ====="; ls /tmp/fr | grep -i kqueue || echo "!!! libkqueue 누락 !!!"
-            cp /tmp/fr/*.rpm /out/
+            dnf -y module reset freeradius || true
+            dnf -y module disable freeradius || true
+            rm -rf /out/* || true
+            echo "===== 설치 트랜잭션 풀어 다운로드 (deps 포함) ====="
+            dnf install -y --downloadonly --downloaddir=/out --setopt=install_weak_deps=False \
+              freeradius freeradius-ldap freeradius-utils freeradius-sqlite
+            echo "===== freeradius 패키지 버전 ====="
+            rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /out/freeradius-*.rpm | sort
+            echo "===== 3.0.20 섞였는지 (있으면 실패) ====="
+            if ls /out | grep -q "3.0.20"; then echo "FAIL: 3.0.20 모듈 패키지 섞임"; exit 1; fi
+            if ! ls /out | grep -q "freeradius-3.2.10"; then echo "FAIL: freeradius 3.2.10 없음"; exit 1; fi
+            echo "===== libkqueue 포함 여부 ====="
+            ls /out | grep -i kqueue || echo "(별도 libkqueue 패키지 없음 - 아래 오프라인 설치검증으로 확인)"
+            echo "===== 오프라인 설치 검증 (/out 만으로 설치) ====="
+            dnf install -y --disablerepo="*" --nogpgcheck --setopt=install_weak_deps=False /out/*.rpm
+            echo "===== 설치된 freeradius 버전 (3.2.10 이어야 함) ====="
+            radiusd -v | head -1
+            echo "radsniff: $(command -v radsniff || echo 없음)"
           '
       - name: tar 묶음 + 체크섬
         run: |
-          cd out; tar czf ../freeradius-3.2.10-el8-bundle.tar.gz *.rpm; cd ..
+          cd out
+          tar czf ../freeradius-3.2.10-el8-bundle.tar.gz *.rpm
+          cd ..
           sha256sum freeradius-3.2.10-el8-bundle.tar.gz | tee bundle.sha256
           echo "포함 RPM 개수: $(ls out/*.rpm | wc -l)"
       - name: Artifact 업로드
