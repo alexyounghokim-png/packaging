@@ -1,0 +1,33 @@
+name: freeradius-3.2.10-el8-bundle
+on:
+  workflow_dispatch:
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download FreeRADIUS 3.2.10 + 의존성 (Rocky 8 컨테이너)
+        run: |
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" rockylinux:8 bash -ceu '
+            printf "[inkbridge]\nname=inkbridge\nbaseurl=https://packages.inkbridgenetworks.com/freeradius-3.2/rocky/8/\nenabled=1\ngpgcheck=0\n" > /etc/yum.repos.d/inkbridge.repo
+            dnf -y install dnf-plugins-core
+            mkdir -p /tmp/fr
+            dnf download --resolve --destdir /tmp/fr freeradius freeradius-config freeradius-ldap freeradius-utils freeradius-sqlite
+            echo "===== RPM 목록 ====="; ls -1 /tmp/fr
+            echo "===== 버전 ====="; rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /tmp/fr/freeradius-3.2*.rpm
+            echo "===== libkqueue 여부 ====="; ls /tmp/fr | grep -i kqueue || echo "!!! libkqueue 누락 !!!"
+            cp /tmp/fr/*.rpm /out/
+          '
+      - name: tar 묶음 + 체크섬
+        run: |
+          cd out; tar czf ../freeradius-3.2.10-el8-bundle.tar.gz *.rpm; cd ..
+          sha256sum freeradius-3.2.10-el8-bundle.tar.gz | tee bundle.sha256
+          echo "포함 RPM 개수: $(ls out/*.rpm | wc -l)"
+      - name: Artifact 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeradius-3.2.10-el8-bundle
+          path: |
+            freeradius-3.2.10-el8-bundle.tar.gz
+            bundle.sha256
+          retention-days: 7
