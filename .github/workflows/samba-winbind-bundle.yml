@@ -7,24 +7,26 @@ jobs:
   bundle:
     runs-on: ubuntu-latest
     steps:
-      - name: Download samba-winbind 4.19.4-3.el8 (서버 매칭) + deps
+      - name: Download samba-winbind + deps (Rocky 8.10 현행)
         run: |
           mkdir -p out
           docker run --rm -v "$PWD/out:/out" rockylinux:8 bash -ceu '
             dnf -y install dnf-plugins-core createrepo_c
-            printf "[r810-vault-baseos]\nname=vault-baseos\nbaseurl=https://dl.rockylinux.org/vault/rocky/8.10/BaseOS/x86_64/os/\nenabled=1\ngpgcheck=0\n[r810-vault-appstream]\nname=vault-appstream\nbaseurl=https://dl.rockylinux.org/vault/rocky/8.10/AppStream/x86_64/os/\nenabled=1\ngpgcheck=0\n" > /etc/yum.repos.d/r810-vault.repo
+            printf "[r8-baseos]\nname=r8-baseos\nbaseurl=https://dl.rockylinux.org/pub/rocky/8/BaseOS/x86_64/os/\nenabled=1\ngpgcheck=0\n[r8-appstream]\nname=r8-appstream\nbaseurl=https://dl.rockylinux.org/pub/rocky/8/AppStream/x86_64/os/\nenabled=1\ngpgcheck=0\n" > /etc/yum.repos.d/r8.repo
             mkdir -p /dl
-            echo "===== samba-winbind 가용 버전 ====="
-            dnf list --showduplicates samba-winbind 2>/dev/null | tail -12 || true
-            echo "===== 다운로드 (4.19.4-3.el8 매칭) ====="
+            echo "===== 가용 버전 확인 ====="
+            dnf list --showduplicates samba-winbind samba-common-libs krb5-workstation 2>/dev/null | tail -20 || true
+            echo "===== 다운로드 (현행 + 의존 samba libs 일괄) ====="
             dnf install -y --downloadonly --downloaddir=/dl --setopt=install_weak_deps=False \
-              samba-winbind-4.19.4-3.el8 samba-winbind-clients-4.19.4-3.el8 samba-common-tools-4.19.4-3.el8 krb5-workstation-1.18.2-27.el8_10
+              samba-winbind samba-winbind-clients samba-common-tools \
+              samba-common-libs samba-client-libs samba-common libwbclient libsmbclient \
+              krb5-workstation
             echo "===== 받은 RPM ====="; ls -1 /dl
-            echo "===== 버전 ====="; rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /dl/*.rpm | sort
-            ls /dl | grep -q "samba-winbind-4.19.4-3.el8" || { echo "FAIL: samba-winbind 4.19.4-3.el8 없음"; exit 1; }
+            echo "===== 버전 (★서버=4.19.4-3.el8 / krb5=1.18.2-27.el8_10) ====="; rpm -qp --qf "%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n" /dl/*.rpm | sort
+            ls /dl | grep -q "samba-winbind-" || { echo "FAIL: samba-winbind 없음"; exit 1; }
             rm -rf /out/* || true; cp /dl/*.rpm /out/
             createrepo_c /out
-            echo "===== 오프라인 설치검증 (clean) ====="
+            echo "===== 오프라인 설치검증 (clean container) ====="
             dnf install -y --disablerepo="*" --nogpgcheck /dl/*.rpm
             echo "tools:"; command -v net ntlm_auth wbinfo kinit klist
           '
